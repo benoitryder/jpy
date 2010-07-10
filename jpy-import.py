@@ -197,7 +197,7 @@ if __name__ == '__main__':
       usage="%prog [OPTIONS] [JMDICT-XML]",
       description="""\
 Build jpy database from XML JMdict.
-JMdict can be provided as a file or downloaded (~5Mo).
+JMdict can be provided as a file or downloaded (~5MB).
 If filename ends with '.gz', it is automatically gunzipped.
 """)
   parser.add_option('-d', '--download', dest='download', action='store_true',

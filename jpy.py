@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 # vim: fileencoding=utf-8
 
-import sqlite3
-import os, re
+import sqlite3, re, os
 
 import pygtk
 pygtk.require('2.0')
@@ -46,8 +45,8 @@ class JpyApp:
     tagtable.add(tag)
   
     self.w_result = gtk.TextView(gtk.TextBuffer(tagtable))
-    self.w_result.set_editable(False) 
-    self.w_result.set_cursor_visible(False) 
+    self.w_result.set_editable(False)
+    self.w_result.set_cursor_visible(False)
     self.w_result.set_wrap_mode(gtk.WRAP_WORD)
     self.w_result.set_justification(gtk.JUSTIFY_LEFT)
     self.w_result.modify_text(gtk.STATE_NORMAL, gtk.gdk.color_parse('black'))
@@ -128,7 +127,7 @@ class Query():
   """
 
   conn = None
-  
+
   def __init__(self, s=None, to_jp=False, limit=None):
     """Build a query.
     Arguments values may be overwritten by special tags in search string.
@@ -152,7 +151,7 @@ class Query():
       / as first character : translate to Japanese
     
     """
-  
+
     if len(s) == 0:
       return ''
 
@@ -193,28 +192,26 @@ class Query():
       if len(ent_id) != 0:
         break
 
-    ent_id_list = '('+','.join(str(i) for i in ent_id)+')'
+    ent_id_list = '(%s)' % ','.join(str(i) for i in ent_id)
 
     # Note: a dictionary is not sorted
     # Entry order is still obtained from ent_id.
-    result = {}
-    for e in ent_id:
-      result[e] = Entry(e)
+    result = dict( (e,Entry(e)) for e in ent_id )
 
-    cursor.execute("SELECT ent_id, keb FROM kanji WHERE ent_id IN "+ent_id_list)
+    cursor.execute("SELECT ent_id, keb FROM kanji WHERE ent_id IN %s" % ent_id_list)
     for s in cursor:
       result[s[0]].keb.append(s[1])
-    cursor.execute("SELECT ent_id, reb FROM reading WHERE ent_id IN "+ent_id_list)
+    cursor.execute("SELECT ent_id, reb FROM reading WHERE ent_id IN %s" % ent_id_list)
     for s in cursor:
       result[s[0]].reb.append(s[1])
-    cursor.execute("SELECT ent_id, sense_num, pos, attr FROM sense WHERE ent_id IN "+ent_id_list+" ORDER BY ent_id, sense_num")
+    cursor.execute("SELECT ent_id, sense_num, pos, attr FROM sense WHERE ent_id IN %s ORDER BY ent_id, sense_num" % ent_id_list)
     for s in cursor:
       result[s[0]].sense.append( (filter(None, s[2].split(',')), filter(None, s[3].split(',')), []) )
-    cursor.execute("SELECT ent_id, sense_num, gloss FROM gloss WHERE ent_id IN "+ent_id_list)
+    cursor.execute("SELECT ent_id, sense_num, gloss FROM gloss WHERE ent_id IN %s" % ent_id_list)
     for s in cursor:
       result[s[0]].sense[s[1]-1][2].append( s[2] )
 
-    return [ result[e] for e in ent_id ]
+    return tuple( result[e] for e in ent_id )
 
   @classmethod
   def connect(cls, dbfile):
