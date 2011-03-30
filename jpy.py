@@ -13,7 +13,7 @@ class JpyApp:
   def __init__(self, db=None):
     self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
     self.window.set_resizable(True)
-    self.window.set_size_request(350,350)
+    self.window.set_size_request(400,500)
     self.window.set_title('jpy')
     self.window.connect('delete_event', lambda w,e: gtk.main_quit())
 
