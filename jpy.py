@@ -64,8 +64,8 @@ class JpyApp:
     self.window.show()
 
     # Connect to SQLite database
-    if db is None:
-      db = os.path.join(os.path.dirname(__file__),'jpy.db')
+    if not os.path.isfile(db):
+      raise ValueError("database file not found: %s"%db)
     Query.connect(db)
 
 
@@ -245,6 +245,18 @@ if __name__ == '__main__':
   parser.add_option('-d', dest='db', metavar='FILE',
       help="SQLite database to use")
   (opts, args) = parser.parse_args()
+
+  if opts.db is None:
+    files = (
+        'jpy.db',
+        os.path.join(os.path.dirname(os.path.realpath(__file__)), 'jpy.db')
+        )
+    for f in files:
+      if os.path.isfile(f):
+        opts.db = f
+        break
+    if opts.db is None:
+      parser.error("cannot find a database file, please use '-d' option")
 
   app = JpyApp(opts.db)
   if len(args) > 0:
