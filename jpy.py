@@ -43,7 +43,7 @@ class JpyApp:
     tag = gtk.TextTag('sense-num')
     tag.set_property('foreground', 'darkgreen')
     tagtable.add(tag)
-  
+
     self.w_result = gtk.TextView(gtk.TextBuffer(tagtable))
     self.w_result.set_editable(False)
     self.w_result.set_cursor_visible(False)
@@ -118,7 +118,7 @@ class Query():
 
   Class method:
     connect -- initialize the SQLite DB connection
-  
+
   Class attribute:
     conn -- SQLite Connection object
 
@@ -149,7 +149,7 @@ class Query():
       *, % : 0 or more characters
       ?, _ : single character
       / as first character : translate to Japanese
-    
+
     """
 
     if len(s) == 0:
@@ -226,7 +226,7 @@ class Entry:
     keb -- kanji writings
     reb -- kana writings
     sense -- definition list (pos list, attr. list, gloss list)
-  
+
   """
 
   def __init__(self, seq):
