@@ -50,6 +50,7 @@ class JpyApp:
     self.w_result.set_cursor_visible(False)
     self.w_result.set_wrap_mode(gtk.WRAP_WORD)
     self.w_result.set_justification(gtk.JUSTIFY_LEFT)
+    self.w_result.set_left_margin(6)
     self.w_result.modify_text(gtk.STATE_NORMAL, gtk.gdk.color_parse('black'))
     self.w_result.modify_font(pango.FontDescription('sans 12'))
 
