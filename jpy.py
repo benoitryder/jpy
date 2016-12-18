@@ -247,11 +247,9 @@ if __name__ == '__main__':
   args = parser.parse_args()
 
   if args.database is None:
-    files = (
-        'jpy.db',
-        os.path.join(os.path.dirname(os.path.realpath(__file__)), 'jpy.db')
-        )
-    for f in files:
+    app_path = os.path.dirname(os.path.realpath(__file__))
+    default_name = 'jpy.sqlite3'
+    for f in (default_name, os.path.join(app_path, default_name)):
       if os.path.isfile(f):
         args.database = f
         break

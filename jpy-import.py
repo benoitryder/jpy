@@ -201,7 +201,7 @@ If filename ends with '.gz', it is automatically gunzipped.
   parser.add_argument('-d', '--download', action='store_true',
       help="download lastest JMdict (take some time)")
   parser.add_argument('-o', '--output', metavar='FILE', default='jpy.db',
-      help="output db file (default 'jpy.db')")
+      help="output db file (default 'jpy.sqlite3')")
   parser.add_argument('xmlfile', nargs='?',
       help="JMdict XML file")
   args = parser.parse_args()
