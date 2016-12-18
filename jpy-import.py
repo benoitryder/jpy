@@ -190,42 +190,37 @@ def kana2romaji(txt):
 
 
 if __name__ == '__main__':
-  from optparse import OptionParser
+  import argparse
   import gzip, urllib, StringIO
 
-  parser = OptionParser(
-      usage="%prog [OPTIONS] [JMDICT-XML]",
-      description="""\
+  parser = argparse.ArgumentParser(description="""\
 Build jpy database from XML JMdict.
 JMdict can be provided as a file or downloaded (~5MB).
 If filename ends with '.gz', it is automatically gunzipped.
 """)
-  parser.add_option('-d', '--download', dest='download', action='store_true',
-      help="download lastest JMdict (take some time)",
-      )
-  parser.add_option('-o', '--output', dest='output',
-      help="output db file (default 'jpy.db')",
-      metavar='DB'
-      )
-  parser.set_defaults(download=False, output='jpy.db')
-
-  (opts, args) = parser.parse_args()
+  parser.add_argument('-d', '--download', action='store_true',
+      help="download lastest JMdict (take some time)")
+  parser.add_argument('-o', '--output', metavar='FILE', default='jpy.db',
+      help="output db file (default 'jpy.db')")
+  parser.add_argument('xmlfile', nargs='?',
+      help="JMdict XML file")
+  args = parser.parse_args()
   
-  if opts.download:
-    if len(args) != 0:
-      parser.error("invalid parameter count")
+  if args.download and args.xmlfile:
+    parser.error("cannot use -d with a manually set XML file")
+
+  if args.download:
     print "downloading JMdict..."
-    f = StringIO.StringIO( urllib.urlopen(jmdict_url).read() )
+    f = StringIO.StringIO(urllib.urlopen(jmdict_url).read())
     f = gzip.GzipFile(fileobj=f)
-  else:
-    if len(args) != 1:
-      parser.error("invalid parameter count")
-    f = args.pop(0)
+  elif args.xmlfile:
+    f = args.xmlfile
     if f.endswith('.gz'):
       f = gzip.GzipFile(f)
+  else:
+    parser.error("either -d or an XML file must be provided")
 
   parser = xml.sax.make_parser()
-  parser.setContentHandler(JMDictHandler(opts.output))
+  parser.setContentHandler(JMDictHandler(args.output))
   parser.parse(f)
-
 

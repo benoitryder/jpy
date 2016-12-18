@@ -238,31 +238,29 @@ class Entry:
 
 
 if __name__ == '__main__':
-  from optparse import OptionParser
-
-  parser = OptionParser(
-      description="PyGTK interface for JMdict.",
-      usage="%prog [OPTIONS] [SEARCH]"
-      )
-  parser.add_option('-d', dest='db', metavar='FILE',
+  import argparse
+  parser = argparse.ArgumentParser(description="PyGTK interface for JMdict.")
+  parser.add_argument('-d', '--database', metavar='FILE',
       help="SQLite database to use")
-  (opts, args) = parser.parse_args()
+  parser.add_argument('search', nargs='?',
+      help="search text")
+  args = parser.parse_args()
 
-  if opts.db is None:
+  if args.database is None:
     files = (
         'jpy.db',
         os.path.join(os.path.dirname(os.path.realpath(__file__)), 'jpy.db')
         )
     for f in files:
       if os.path.isfile(f):
-        opts.db = f
+        args.database = f
         break
-    if opts.db is None:
+    if args.database is None:
       parser.error("cannot find a database file, please use '-d' option")
 
-  app = JpyApp(opts.db)
-  if len(args) > 0:
-    app.w_search.get_child().set_text(args[0])
+  app = JpyApp(args.database)
+  if args.search:
+    app.w_search.get_child().set_text(args.search)
     app.w_search.get_child().activate()
   app.main()
 
