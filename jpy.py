@@ -3,8 +3,9 @@
 
 import sqlite3, re, os
 
-import pygtk
-pygtk.require('2.0')
+from gi import pygtkcompat
+pygtkcompat.enable()
+pygtkcompat.enable_gtk(version='3.0')
 import gtk, pango
 
 
@@ -20,31 +21,31 @@ class JpyApp:
     box = gtk.VBox(False, 0)
     self.window.add(box)
 
-    self.w_search = gtk.combo_box_entry_new_text()
-    self.w_search.child.connect('activate', lambda w: self.display_results(w.get_text()))
-    self.w_search.child.modify_text(gtk.STATE_NORMAL, gtk.gdk.color_parse('black'))
-    self.w_search.child.modify_font(pango.FontDescription('sans 12'))
+    self.w_search = gtk.ComboBoxText.new_with_entry()
+    self.w_search.get_child().connect('activate', lambda w: self.display_results(w.get_text()))
+    self.w_search.get_child().modify_text(gtk.STATE_NORMAL, gtk.gdk.color_parse('black'))
+    self.w_search.get_child().modify_font(pango.FontDescription('sans 12'))
     box.pack_start(self.w_search, expand=False, fill=False)
 
     # Tags (customize style of displayed text here)
     tagtable = gtk.TextTagTable()
-    tag = gtk.TextTag('jap')
+    tag = gtk.TextTag(name='jap')
     tag.set_property('foreground', 'darkblue')
     tag.set_property('size-points', 14)
     tag.set_property('pixels-above-lines', 8)
     #tag.set_property('weight', pango.WEIGHT_BOLD)
     tagtable.add(tag)
-    tag = gtk.TextTag('pos')
+    tag = gtk.TextTag(name='pos')
     tag.set_property('foreground', 'darkred')
     tagtable.add(tag)
-    tag = gtk.TextTag('attr')
+    tag = gtk.TextTag(name='attr')
     tag.set_property('foreground', 'purple')
     tagtable.add(tag)
-    tag = gtk.TextTag('sense-num')
+    tag = gtk.TextTag(name='sense-num')
     tag.set_property('foreground', 'darkgreen')
     tagtable.add(tag)
 
-    self.w_result = gtk.TextView(gtk.TextBuffer(tagtable))
+    self.w_result = gtk.TextView(buffer=gtk.TextBuffer(tag_table=tagtable))
     self.w_result.set_editable(False)
     self.w_result.set_cursor_visible(False)
     self.w_result.set_wrap_mode(gtk.WRAP_WORD)
@@ -81,9 +82,9 @@ class JpyApp:
 
     result = Query(txt, limit=50).execute()
 
-    self.w_search.child.select_region(0,-1)
+    self.w_search.get_child().select_region(0,-1)
     self.w_search.prepend_text(txt)
-    self.w_search.remove_text(10)
+    self.w_search.remove(10)
     iter = buffer.get_end_iter()
 
     # Format results (customize display format here)
@@ -260,7 +261,7 @@ if __name__ == '__main__':
 
   app = JpyApp(opts.db)
   if len(args) > 0:
-    app.w_search.child.set_text(args[0])
-    app.w_search.child.activate()
+    app.w_search.get_child().set_text(args[0])
+    app.w_search.get_child().activate()
   app.main()
 
