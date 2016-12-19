@@ -165,10 +165,14 @@ tbl_symbols = [
     (u'〜', '~'), (u'。', '.'), (u'、', ','), (u'　', ' '),
     ]
 
+tbl_all = tbl_hiragana + tbl_katakana + tbl_symbols
+kana2romaji_regex = re.compile('|'.join(s for s, _ in tbl_all))
+kana2romaji_map = dict(tbl_all)
+
+
 def kana2romaji(txt):
   txt = unicode(txt)
-  for k,v in tbl_hiragana + tbl_katakana + tbl_symbols:
-    txt = txt.replace(k, v)
+  txt = kana2romaji_regex.sub(lambda m: kana2romaji_map[m.group()], txt)
   txt = re.sub(ur'[っッ]([bcdfghjkmnprstvwz])', r'\1\1', txt)
   txt = re.sub(ur'([aeiou])ー', r'\1\1', txt)
   txt = re.sub(ur'[・ー−―]', '-', txt)
