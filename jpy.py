@@ -3,61 +3,60 @@
 
 import sqlite3, re, os
 
-from gi import pygtkcompat
-pygtkcompat.enable()
-pygtkcompat.enable_gtk(version='3.0')
-import gtk, pango
+import gi
+gi.require_version('Gtk', '3.0')
+from gi.repository import Gtk, Gdk, Pango
 
 
 class JpyApp:
 
   def __init__(self, db=None):
-    self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
+    self.window = Gtk.Window(Gtk.WindowType.TOPLEVEL)
     self.window.set_resizable(True)
     self.window.set_size_request(400,500)
     self.window.set_title('jpy')
-    self.window.connect('delete_event', lambda w,e: gtk.main_quit())
+    self.window.connect('delete_event', lambda w,e: Gtk.main_quit())
 
-    box = gtk.VBox(False, 0)
+    box = Gtk.Box.new(Gtk.Orientation.VERTICAL, 0)
     self.window.add(box)
 
-    self.w_search = gtk.ComboBoxText.new_with_entry()
+    self.w_search = Gtk.ComboBoxText.new_with_entry()
     self.w_search.get_child().connect('activate', lambda w: self.display_results(w.get_text()))
-    self.w_search.get_child().modify_text(gtk.STATE_NORMAL, gtk.gdk.color_parse('black'))
-    self.w_search.get_child().modify_font(pango.FontDescription('sans 12'))
-    box.pack_start(self.w_search, expand=False, fill=False)
+    self.w_search.get_child().modify_text(Gtk.StateType.NORMAL, Gdk.color_parse('black'))
+    self.w_search.get_child().modify_font(Pango.FontDescription('sans 12'))
+    box.pack_start(self.w_search, False, False, 0)
 
     # Tags (customize style of displayed text here)
-    tagtable = gtk.TextTagTable()
-    tag = gtk.TextTag(name='jap')
+    tagtable = Gtk.TextTagTable()
+    tag = Gtk.TextTag(name='jap')
     tag.set_property('foreground', 'darkblue')
     tag.set_property('size-points', 14)
     tag.set_property('pixels-above-lines', 8)
-    #tag.set_property('weight', pango.WEIGHT_BOLD)
+    #tag.set_property('weight', Pango.Weight.BOLD)
     tagtable.add(tag)
-    tag = gtk.TextTag(name='pos')
+    tag = Gtk.TextTag(name='pos')
     tag.set_property('foreground', 'darkred')
     tagtable.add(tag)
-    tag = gtk.TextTag(name='attr')
+    tag = Gtk.TextTag(name='attr')
     tag.set_property('foreground', 'purple')
     tagtable.add(tag)
-    tag = gtk.TextTag(name='sense-num')
+    tag = Gtk.TextTag(name='sense-num')
     tag.set_property('foreground', 'darkgreen')
     tagtable.add(tag)
 
-    self.w_result = gtk.TextView(buffer=gtk.TextBuffer(tag_table=tagtable))
+    self.w_result = Gtk.TextView(buffer=Gtk.TextBuffer(tag_table=tagtable))
     self.w_result.set_editable(False)
     self.w_result.set_cursor_visible(False)
-    self.w_result.set_wrap_mode(gtk.WRAP_WORD)
-    self.w_result.set_justification(gtk.JUSTIFY_LEFT)
+    self.w_result.set_wrap_mode(Gtk.WrapMode.WORD)
+    self.w_result.set_justification(Gtk.Justification.LEFT)
     self.w_result.set_left_margin(6)
-    self.w_result.modify_text(gtk.STATE_NORMAL, gtk.gdk.color_parse('black'))
-    self.w_result.modify_font(pango.FontDescription('sans 12'))
+    self.w_result.modify_text(Gtk.StateType.NORMAL, Gdk.color_parse('black'))
+    self.w_result.modify_font(Pango.FontDescription('sans 12'))
 
-    self.w_display = gtk.ScrolledWindow()
-    self.w_display.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
+    self.w_display = Gtk.ScrolledWindow()
+    self.w_display.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
     self.w_display.add_with_viewport(self.w_result)
-    box.pack_start(self.w_display, expand=True, fill=True)
+    box.pack_start(self.w_display, True, True, 0)
 
     box.show()
     self.w_search.show()
@@ -72,7 +71,7 @@ class JpyApp:
 
 
   def main(self):
-    gtk.main()
+    Gtk.main()
 
 
   def display_results(self, txt):
