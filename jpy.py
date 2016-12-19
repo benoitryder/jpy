@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 # vim: fileencoding=utf-8
 
-import sqlite3, re, os
+import os
+import re
+import sqlite3
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -13,7 +15,7 @@ class JpyApp:
   def __init__(self, db=None):
     self.window = Gtk.Window(Gtk.WindowType.TOPLEVEL)
     self.window.set_resizable(True)
-    self.window.set_size_request(400,500)
+    self.window.set_size_request(400, 500)
     self.window.set_title('jpy')
     self.window.connect('delete_event', lambda w,e: Gtk.main_quit())
 
@@ -32,7 +34,6 @@ class JpyApp:
     tag.set_property('foreground', 'darkblue')
     tag.set_property('size-points', 14)
     tag.set_property('pixels-above-lines', 8)
-    #tag.set_property('weight', Pango.Weight.BOLD)
     tagtable.add(tag)
     tag = Gtk.TextTag(name='pos')
     tag.set_property('foreground', 'darkred')
@@ -75,37 +76,37 @@ class JpyApp:
 
 
   def display_results(self, txt):
-    buffer = self.w_result.get_buffer()
-    buffer.set_text('')
+    buf = self.w_result.get_buffer()
+    buf.set_text('')
     if len(txt) == 0:
       return
 
     result = Query(txt, limit=50).execute()
 
-    self.w_search.get_child().select_region(0,-1)
+    self.w_search.get_child().select_region(0, -1)
     self.w_search.prepend_text(txt)
     self.w_search.remove(10)
-    iter = buffer.get_end_iter()
+    it = buf.get_end_iter()
 
     # Format results (customize display format here)
     for e in result:
       s = ', '.join(e.reb)
       if len(e.keb):
-        s = ', '.join(e.keb) + ' / ' + s
-      buffer.insert_with_tags_by_name(iter, s+"\n", 'jap')
+        s = '%s / %s' % (', '.join(e.keb), s)
+      buf.insert_with_tags_by_name(it, "%s\n" % s, 'jap')
       for i,s in enumerate(e.sense):
-        buffer.insert_with_tags_by_name(iter, "%d) "%(i+1), 'sense-num')
-        if len(s[0]) > 0:
-          buffer.insert_with_tags_by_name(iter, ' '.join(s[0])+'  ', 'pos')
-        if len(s[1]) > 0:
-          buffer.insert_with_tags_by_name(iter, '['+' '.join(s[1])+'] ', 'attr')
-        buffer.insert(iter, ', '.join(s[2])+'\n')
+        buf.insert_with_tags_by_name(it, "%d) " % (i+1), 'sense-num')
+        if len(s[0]):
+          buf.insert_with_tags_by_name(it, '%s  ' % ' '.join(s[0]), 'pos')
+        if len(s[1]):
+          buf.insert_with_tags_by_name(it, '[%s] ' % ' '.join(s[1]), 'attr')
+        buf.insert(it, '%s\n' % ', '.join(s[2]))
 
     # Scroll at the top
     self.w_display.get_vadjustment().set_value(0)
 
 
-class Query():
+class Query:
   """Search query and database connection.
 
   Instance attributes:
@@ -153,7 +154,7 @@ class Query():
 
     """
 
-    if len(s) == 0:
+    if not s:
       return ''
 
     s = unicode(s)
@@ -184,20 +185,20 @@ class Query():
       tables, fields = ('reading',), ('romaji',)
     else:
       # Unicode: first kanji, then kana
-      tables, fields = ('kanji','reading',), ('keb','reb',)
+      tables, fields = ('kanji', 'reading',), ('keb', 'reb',)
     # Fetch results
     query = "SELECT DISTINCT ent_id FROM %s WHERE %s LIKE ? ORDER BY length(%s) LIMIT ?"
-    for t,f in zip(tables,fields):
-      cursor.execute(query % (t, f, f), (self.pattern,limit))
-      ent_id = tuple( x[0] for x in cursor )
-      if len(ent_id) != 0:
+    for t,f in zip(tables, fields):
+      cursor.execute(query % (t, f, f), (self.pattern, limit))
+      ent_id = [x[0] for x in cursor]
+      if ent_id:
         break
 
     ent_id_list = '(%s)' % ','.join(str(i) for i in ent_id)
 
-    # Note: a dictionary is not sorted
+    # Dictionary is not sorted,
     # Entry order is still obtained from ent_id.
-    result = dict( (e,Entry(e)) for e in ent_id )
+    result = {e: Entry(e) for e in ent_id}
 
     cursor.execute("SELECT ent_id, keb FROM kanji WHERE ent_id IN %s" % ent_id_list)
     for s in cursor:
@@ -207,12 +208,12 @@ class Query():
       result[s[0]].reb.append(s[1])
     cursor.execute("SELECT ent_id, sense_num, pos, attr FROM sense WHERE ent_id IN %s ORDER BY ent_id, sense_num" % ent_id_list)
     for s in cursor:
-      result[s[0]].sense.append( (filter(None, s[2].split(',')), filter(None, s[3].split(',')), []) )
+      result[s[0]].sense.append((filter(None, s[2].split(',')), filter(None, s[3].split(',')), []))
     cursor.execute("SELECT ent_id, sense_num, gloss FROM gloss WHERE ent_id IN %s" % ent_id_list)
     for s in cursor:
-      result[s[0]].sense[s[1]-1][2].append( s[2] )
+      result[s[0]].sense[s[1]-1][2].append(s[2])
 
-    return tuple( result[e] for e in ent_id )
+    return [result[e] for e in ent_id]
 
   @classmethod
   def connect(cls, dbfile):
@@ -232,11 +233,12 @@ class Entry:
 
   def __init__(self, seq):
     self.seq = seq
-    self.keb, self.reb, self.sense = [], [], []
+    self.keb = []
+    self.reb = []
+    self.sense = []
 
 
-
-if __name__ == '__main__':
+def main():
   import argparse
   parser = argparse.ArgumentParser(description="PyGTK interface for JMdict.")
   parser.add_argument('-d', '--database', metavar='FILE',
@@ -260,4 +262,7 @@ if __name__ == '__main__':
     app.w_search.get_child().set_text(args.search)
     app.w_search.get_child().activate()
   app.main()
+
+if __name__ == '__main__':
+  main()
 

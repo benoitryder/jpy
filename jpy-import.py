@@ -3,7 +3,8 @@
 
 import xml.sax
 import sqlite3
-import re, sys
+import re
+import sys
 
 
 # Last JMdict version (English only)
@@ -17,17 +18,17 @@ class JMDictHandler(xml.sax.handler.ContentHandler):
 
   # Collect entity declarations, to back-resolve entities
   def EntityDeclHandler(self, entityName, is_parameter_entity, value, base, systemId, publicId, notationName):
-    self.ent[value] = entityName
+    self.entities[value] = entityName
 
   def startDocument(self):
     self._locator._ref._parser.EntityDeclHandler = self.EntityDeclHandler
-    self.ent = {}
+    self.entities = {}
 
     self.conn = sqlite3.connect(self.db)
     cursor = self.conn.cursor()
 
     for s in ('kanji', 'reading', 'sense', 'gloss'):
-      cursor.execute("DROP TABLE IF EXISTS %s"%s)
+      cursor.execute("DROP TABLE IF EXISTS %s" % s)
 
     cursor.execute("""
     CREATE TABLE kanji (
@@ -62,9 +63,7 @@ class JMDictHandler(xml.sax.handler.ContentHandler):
 
     cursor.execute("CREATE INDEX k_ent ON kanji (ent_id)")
     cursor.execute("CREATE INDEX r_ent ON reading (ent_id)")
-    #cursor.execute("CREATE INDEX r_reb ON reading (reb)")
     cursor.execute("CREATE INDEX g_sense ON gloss (ent_id, sense_num)")
-    #cursor.execute("CREATE INDEX g_gloss ON gloss (gloss)")
 
     self.conn.commit()
 
@@ -86,10 +85,7 @@ class JMDictHandler(xml.sax.handler.ContentHandler):
       self.pos = []
       self.attr = []
     elif name == 'gloss':
-      if attrs.has_key('xml:lang'):
-        self.lang = attrs.getValue('xml:lang')
-      else:
-        self.lang = None
+      self.lang = attrs.get('xml:lang', 'en')
 
   def endElement(self, name):
     self.txt = self.txt.strip()
@@ -104,12 +100,10 @@ class JMDictHandler(xml.sax.handler.ContentHandler):
           (self.cur_entry, self.sense, ','.join(self.pos), ','.join(self.attr)))
       self.sense += 1
     elif name == 'pos':
-      self.pos.append(self.ent[self.txt])
-    elif name in ('field', 'dial',):
-      self.attr.append(self.ent[self.txt])
+      self.pos.append(self.entities[self.txt])
+    elif name in ('field', 'dial'):
+      self.attr.append(self.entities[self.txt])
     elif name == 'gloss':
-      if self.lang is None:
-        self.lang = 'en'
       self.conn.execute("INSERT INTO gloss VALUES (?,?,?,?)",
           (self.cur_entry, self.sense, self.lang, self.txt))
 
@@ -117,7 +111,7 @@ class JMDictHandler(xml.sax.handler.ContentHandler):
     self.txt += content
 
 
-tbl_hiragana = (
+tbl_hiragana = [
     (u'きゃ', 'kya'), (u'きゅ', 'kyu'), (u'きょ', 'kyo'),
     (u'しゃ', 'sha'), (u'しゅ', 'shu'), (u'しょ', 'sho'),
     (u'ちゃ', 'cha'), (u'ちゅ', 'chu'), (u'ちょ', 'cho'),
@@ -147,9 +141,9 @@ tbl_hiragana = (
     (u'ば', 'ba'),  (u'び', 'bi'),  (u'ぶ', 'bu'),  (u'べ', 'be'),  (u'ぼ', 'bo'),
     (u'ぱ', 'pa'),  (u'ぴ', 'pi'),  (u'ぷ', 'pu'),  (u'ぺ', 'pe'),  (u'ぽ', 'po'),
     (u'ぁ', 'a'),   (u'ぃ', 'i'),   (u'ぅ', 'u'),   (u'ぇ', 'e'),   (u'ぉ', 'o'),
-    )
+    ]
 
-tbl_katakana = (
+tbl_katakana = [
     (u'イェ', 'ye'),
     (u'ヴァ', 'va'),  (u'ヴィ', 'vi'),  (u'ヴェ', 've'),  (u'ヴォ', 'vo'),
     (u'ヴャ', 'vya'), (u'ヴュ', 'vyu'), (u'ヴョ', 'vyo'),
@@ -165,11 +159,11 @@ tbl_katakana = (
     (u'クヮ', 'kwa'), (u'クァ', 'kwa'), (u'クィ', 'kwi'), (u'クェ', 'kwe'), (u'クォ', 'kwo'),
     (u'グヮ', 'gwa'), (u'グァ', 'gwa'), (u'グィ', 'gwi'), (u'グェ', 'gwe'), (u'グォ', 'gwo'),
     (u'ヴ', 'vu'),
-    ) + tuple([ (''.join(unichr(ord(c)+0x60) for c in k), v) for k,v in tbl_hiragana])
+    ] + [(''.join(unichr(ord(c)+0x60) for c in k), v) for k,v in tbl_hiragana]
 
-tbl_symbols = (
+tbl_symbols = [
     (u'〜', '~'), (u'。', '.'), (u'、', ','), (u'　', ' '),
-    )
+    ]
 
 def kana2romaji(txt):
   txt = unicode(txt)
@@ -179,7 +173,7 @@ def kana2romaji(txt):
   txt = re.sub(ur'([aeiou])ー', r'\1\1', txt)
   txt = re.sub(ur'[・ー−―]', '-', txt)
   txt = re.sub(ur'[っッ]', r'-tsu', txt)
-  txt = re.sub(ur'[\uff00-\uff5e]', lambda m: unichr(ord(m.group(0))-0xfee0), txt)
+  txt = re.sub(ur'[\uff00-\uff5e]', lambda m: unichr(ord(m.group(0)) - 0xfee0), txt)
   try:
     txt = str(txt)
   except UnicodeEncodeError, e:
@@ -189,9 +183,11 @@ def kana2romaji(txt):
 
 
 
-if __name__ == '__main__':
+def main():
   import argparse
-  import gzip, urllib, StringIO
+  import gzip
+  import urllib
+  import StringIO
 
   parser = argparse.ArgumentParser(description="""\
 Build jpy database from XML JMdict.
@@ -223,4 +219,7 @@ If filename ends with '.gz', it is automatically gunzipped.
   parser = xml.sax.make_parser()
   parser.setContentHandler(JMDictHandler(args.output))
   parser.parse(f)
+
+if __name__ == '__main__':
+  main()
 
