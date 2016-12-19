@@ -24,58 +24,65 @@ class JMDictHandler(xml.sax.handler.ContentHandler):
     self._locator._ref._parser.EntityDeclHandler = self.EntityDeclHandler
     self.entities = {}
 
-    self.conn = sqlite3.connect(self.db)
-    cursor = self.conn.cursor()
-
-    for s in ('kanji', 'reading', 'sense', 'gloss'):
-      cursor.execute("DROP TABLE IF EXISTS %s" % s)
-
-    cursor.execute("""
-    CREATE TABLE kanji (
-      ent_id INT NOT NULL,
-      keb TINYTEXT NOT NULL
-    )
-    """)
-    cursor.execute("""
-    CREATE TABLE reading (
-      ent_id INT NOT NULL,
-      reb TINYTEXT NOT NULL,
-      romaji TINYTEXT NOT NULL
-    )
-    """)
-    cursor.execute("""
-    CREATE TABLE sense (
-      ent_id INT NOT NULL,
-      sense_num INT NOT NULL,
-      pos VARCHAR(50) NOT NULL,
-      attr VARCHAR(50) NOT NULL,
-      PRIMARY KEY (ent_id, sense_num)
-    )
-    """)
-    cursor.execute("""
-    CREATE TABLE gloss (
-      ent_id INT NOT NULL,
-      sense_num INT NOT NULL,
-      lang VARCHAR(5) NOT NULL,
-      gloss TEXT NOT NULL
-    )
-    """)
-
-    cursor.execute("CREATE INDEX k_ent ON kanji (ent_id)")
-    cursor.execute("CREATE INDEX r_ent ON reading (ent_id)")
-    cursor.execute("CREATE INDEX g_sense ON gloss (ent_id, sense_num)")
-
-    self.conn.commit()
-
     self.cur_entry = None
     self.cur_sense = None
     self.txt = None
+    self.kanji_values = []
+    self.reading_values = []
+    self.sense_values = []
+    self.gloss_values = []
 
 
   def endDocument(self):
-    self.conn.execute('VACUUM')
-    self.conn.commit()
-    self.conn.close()
+    with sqlite3.connect(self.db) as conn:
+      cursor = conn.cursor()
+
+      for s in ('kanji', 'reading', 'sense', 'gloss'):
+        cursor.execute("DROP TABLE IF EXISTS %s" % s)
+
+      cursor.execute("""
+      CREATE TABLE kanji (
+        ent_id INT NOT NULL,
+        keb TINYTEXT NOT NULL
+      )
+      """)
+      cursor.execute("""
+      CREATE TABLE reading (
+        ent_id INT NOT NULL,
+        reb TINYTEXT NOT NULL,
+        romaji TINYTEXT NOT NULL
+      )
+      """)
+      cursor.execute("""
+      CREATE TABLE sense (
+        ent_id INT NOT NULL,
+        sense_num INT NOT NULL,
+        pos VARCHAR(50) NOT NULL,
+        attr VARCHAR(50) NOT NULL,
+        PRIMARY KEY (ent_id, sense_num)
+      )
+      """)
+      cursor.execute("""
+      CREATE TABLE gloss (
+        ent_id INT NOT NULL,
+        sense_num INT NOT NULL,
+        lang VARCHAR(5) NOT NULL,
+        gloss TEXT NOT NULL
+      )
+      """)
+
+      conn.executemany("INSERT INTO kanji VALUES (?,?)", self.kanji_values)
+      conn.executemany("INSERT INTO reading VALUES (?,?,?)", self.reading_values)
+      conn.executemany("INSERT INTO sense VALUES (?,?,?,?)", self.sense_values)
+      conn.executemany("INSERT INTO gloss VALUES (?,?,?,?)", self.gloss_values)
+
+      cursor.execute("CREATE INDEX k_ent ON kanji (ent_id)")
+      cursor.execute("CREATE INDEX r_ent ON reading (ent_id)")
+      cursor.execute("CREATE INDEX g_sense ON gloss (ent_id, sense_num)")
+
+      conn.execute('VACUUM')
+      conn.commit()
+
 
   def startElement(self, name, attrs):
     self.txt = ''
@@ -92,20 +99,18 @@ class JMDictHandler(xml.sax.handler.ContentHandler):
     if name == 'ent_seq':
       self.cur_entry = int(self.txt)
     elif name == 'keb':
-      self.conn.execute("INSERT INTO kanji VALUES (?,?)", (self.cur_entry, self.txt))
+      self.kanji_values.append((self.cur_entry, self.txt))
     elif name == 'reb':
-      self.conn.execute("INSERT INTO reading VALUES (?,?,?)", (self.cur_entry, self.txt, kana2romaji(self.txt)))
+      self.reading_values.append((self.cur_entry, self.txt, kana2romaji(self.txt)))
     elif name == 'sense':
-      self.conn.execute("INSERT INTO sense VALUES (?,?,?,?)",
-          (self.cur_entry, self.sense, ','.join(self.pos), ','.join(self.attr)))
+      self.sense_values.append((self.cur_entry, self.sense, ','.join(self.pos), ','.join(self.attr)))
       self.sense += 1
     elif name == 'pos':
       self.pos.append(self.entities[self.txt])
     elif name in ('field', 'dial'):
       self.attr.append(self.entities[self.txt])
     elif name == 'gloss':
-      self.conn.execute("INSERT INTO gloss VALUES (?,?,?,?)",
-          (self.cur_entry, self.sense, self.lang, self.txt))
+      self.gloss_values.append((self.cur_entry, self.sense, self.lang, self.txt))
 
   def characters(self, content):
     self.txt += content
