@@ -240,7 +240,7 @@ class Entry:
 
 def main():
   import argparse
-  parser = argparse.ArgumentParser(description="PyGTK interface for JMdict.")
+  parser = argparse.ArgumentParser(description="GTK+ interface for JMdict.")
   parser.add_argument('-d', '--database', metavar='FILE',
       help="SQLite database to use")
   parser.add_argument('search', nargs='?',
