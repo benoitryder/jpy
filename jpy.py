@@ -4,6 +4,8 @@
 import os
 import re
 import sqlite3
+import xml.sax
+import gzip
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -238,24 +240,248 @@ class Entry:
     self.sense = []
 
 
+class JMDictHandler(xml.sax.handler.ContentHandler):
+
+  def __init__(self, db_output):
+    if not isinstance(sqlite3, sqlite3.Connection):
+      db_output = sqlite3.connect(db_output)
+    self.db_output = db_output
+
+  # Collect entity declarations, to back-resolve entities
+  def EntityDeclHandler(self, entityName, is_parameter_entity, value, base, systemId, publicId, notationName):
+    self.entities[value] = entityName
+
+  def startDocument(self):
+    self._locator._ref._parser.EntityDeclHandler = self.EntityDeclHandler
+    self.entities = {}
+
+    self.cur_entry = None
+    self.cur_sense = None
+    self.txt = None
+    self.kanji_values = []
+    self.reading_values = []
+    self.sense_values = []
+    self.gloss_values = []
+
+
+  def endDocument(self):
+    with self.db_output as conn:
+      for s in ('kanji', 'reading', 'sense', 'gloss'):
+        conn.execute("DROP TABLE IF EXISTS %s" % s)
+
+      conn.execute("""
+      CREATE TABLE kanji (
+        ent_id INT NOT NULL,
+        keb TINYTEXT NOT NULL
+      )
+      """)
+      conn.execute("""
+      CREATE TABLE reading (
+        ent_id INT NOT NULL,
+        reb TINYTEXT NOT NULL,
+        romaji TINYTEXT NOT NULL
+      )
+      """)
+      conn.execute("""
+      CREATE TABLE sense (
+        ent_id INT NOT NULL,
+        sense_num INT NOT NULL,
+        pos VARCHAR(50) NOT NULL,
+        attr VARCHAR(50) NOT NULL,
+        PRIMARY KEY (ent_id, sense_num)
+      )
+      """)
+      conn.execute("""
+      CREATE TABLE gloss (
+        ent_id INT NOT NULL,
+        sense_num INT NOT NULL,
+        lang VARCHAR(5) NOT NULL,
+        gloss TEXT NOT NULL
+      )
+      """)
+
+      conn.executemany("INSERT INTO kanji VALUES (?,?)", self.kanji_values)
+      conn.executemany("INSERT INTO reading VALUES (?,?,?)", self.reading_values)
+      conn.executemany("INSERT INTO sense VALUES (?,?,?,?)", self.sense_values)
+      conn.executemany("INSERT INTO gloss VALUES (?,?,?,?)", self.gloss_values)
+
+      conn.execute("CREATE INDEX k_ent ON kanji (ent_id)")
+      conn.execute("CREATE INDEX r_ent ON reading (ent_id)")
+      conn.execute("CREATE INDEX g_sense ON gloss (ent_id, sense_num)")
+
+      #conn.execute('VACUUM')
+      conn.commit()
+
+
+  def startElement(self, name, attrs):
+    self.txt = ''
+    if name == 'entry':
+      self.sense = 0
+    elif name == 'sense':
+      self.pos = []
+      self.attr = []
+    elif name == 'gloss':
+      self.lang = attrs.get('xml:lang', 'en')
+
+  def endElement(self, name):
+    self.txt = self.txt.strip()
+    if name == 'ent_seq':
+      self.cur_entry = int(self.txt)
+    elif name == 'keb':
+      self.kanji_values.append((self.cur_entry, self.txt))
+    elif name == 'reb':
+      self.reading_values.append((self.cur_entry, self.txt, kana2romaji(self.txt)))
+    elif name == 'sense':
+      self.sense_values.append((self.cur_entry, self.sense, ','.join(self.pos), ','.join(self.attr)))
+      self.sense += 1
+    elif name == 'pos':
+      self.pos.append(self.entities[self.txt])
+    elif name in ('field', 'dial'):
+      self.attr.append(self.entities[self.txt])
+    elif name == 'gloss':
+      self.gloss_values.append((self.cur_entry, self.sense, self.lang, self.txt))
+
+  def characters(self, content):
+    self.txt += content
+
+
+tbl_hiragana = [
+    (u'きゃ', 'kya'), (u'きゅ', 'kyu'), (u'きょ', 'kyo'),
+    (u'しゃ', 'sha'), (u'しゅ', 'shu'), (u'しょ', 'sho'),
+    (u'ちゃ', 'cha'), (u'ちゅ', 'chu'), (u'ちょ', 'cho'),
+    (u'にゃ', 'nya'), (u'にゅ', 'nyu'), (u'にょ', 'nyo'),
+    (u'ひゃ', 'hya'), (u'ひゅ', 'hyu'), (u'ひょ', 'hyo'),
+    (u'みゃ', 'mya'), (u'みゅ', 'myu'), (u'みょ', 'myo'),
+    (u'りゃ', 'rya'), (u'りゅ', 'ryu'), (u'りょ', 'ryo'),
+    (u'ぎゃ', 'gya'), (u'ぎゅ', 'gyu'), (u'ぎょ', 'gyo'),
+    (u'じゃ', 'ja'),  (u'じゅ', 'ju'),  (u'じょ', 'jo'),
+    (u'ぢゃ', 'ja'),  (u'ぢゅ', 'ju'),  (u'ぢょ', 'jo'),
+    (u'びゃ', 'bya'), (u'びゅ', 'byu'), (u'びょ', 'byo'),
+    (u'ぴゃ', 'pya'), (u'ぴゅ', 'pyu'), (u'ぴょ', 'pyo'),
+    (u'あ', 'a'),   (u'い', 'i'),   (u'う', 'u'),   (u'え', 'e'),   (u'お', 'o'),
+    (u'か', 'ka'),  (u'き', 'ki'),  (u'く', 'ku'),  (u'け', 'ke'),  (u'こ', 'ko'),
+    (u'さ', 'sa'),  (u'し', 'shi'), (u'す', 'su'),  (u'せ', 'se'),  (u'そ', 'so'),
+    (u'た', 'ta'),  (u'ち', 'chi'), (u'つ', 'tsu'), (u'て', 'te'),  (u'と', 'to'),
+    (u'な', 'na'),  (u'に', 'ni'),  (u'ぬ', 'nu'),  (u'ね', 'ne'),  (u'の', 'no'),
+    (u'は', 'ha'),  (u'ひ', 'hi'),  (u'ふ', 'fu'),  (u'へ', 'he'),  (u'ほ', 'ho'),
+    (u'ま', 'ma'),  (u'み', 'mi'),  (u'む', 'mu'),  (u'め', 'me'),  (u'も', 'mo'),
+    (u'や', 'ya'),  (u'ゆ', 'yu'),  (u'よ', 'yo'),
+    (u'ら', 'ra'),  (u'り', 'ri'),  (u'る', 'ru'),  (u'れ', 're'),  (u'ろ', 'ro'),
+    (u'わ', 'wa'),  (u'ゐ', 'wi'),  (u'ゑ', 'we'),  (u'を', 'wo'),
+    (u'ん', 'n'),
+    (u'が', 'ga'),  (u'ぎ', 'gi'),  (u'ぐ', 'gu'),  (u'げ', 'ge'),  (u'ご', 'go'),
+    (u'ざ', 'za'),  (u'じ', 'ji'),  (u'ず', 'zu'),  (u'ぜ', 'ze'),  (u'ぞ', 'zo'),
+    (u'だ', 'da'),  (u'ぢ', 'ji'),  (u'づ', 'zu'), (u'で', 'de'),  (u'ど', 'do'),
+    (u'ば', 'ba'),  (u'び', 'bi'),  (u'ぶ', 'bu'),  (u'べ', 'be'),  (u'ぼ', 'bo'),
+    (u'ぱ', 'pa'),  (u'ぴ', 'pi'),  (u'ぷ', 'pu'),  (u'ぺ', 'pe'),  (u'ぽ', 'po'),
+    (u'ぁ', 'a'),   (u'ぃ', 'i'),   (u'ぅ', 'u'),   (u'ぇ', 'e'),   (u'ぉ', 'o'),
+    ]
+
+tbl_katakana = [
+    (u'イェ', 'ye'),
+    (u'ヴァ', 'va'),  (u'ヴィ', 'vi'),  (u'ヴェ', 've'),  (u'ヴォ', 'vo'),
+    (u'ヴャ', 'vya'), (u'ヴュ', 'vyu'), (u'ヴョ', 'vyo'),
+    (u'ブュ', 'byu'),
+    (u'シェ', 'she'), (u'ジェ', 'je'),
+    (u'チェ', 'che'),
+    (u'スィ', 'si'),  (u'ズィ', 'zi'),
+    (u'ティ', 'ti'),  (u'トゥ', 'tu'),  (u'テュ', 'tyu'), (u'ドュ', 'dyu'),
+    (u'ディ', 'di'),  (u'ドゥ', 'du'),  (u'デュ', 'dyu'),
+    (u'ツァ', 'tsa'), (u'ツィ', 'tsi'), (u'ツェ', 'tse'), (u'ツォ', 'tso'),
+    (u'ファ', 'fa'),  (u'フィ', 'fi'),  (u'ホゥ', 'hu'),  (u'フェ', 'fe'),  (u'フォ', 'fo'),   (u'フュ', 'fyu'),
+    (u'ウィ', 'wi'),  (u'ウェ', 'we'),  (u'ウォ', 'wo'),
+    (u'クヮ', 'kwa'), (u'クァ', 'kwa'), (u'クィ', 'kwi'), (u'クェ', 'kwe'), (u'クォ', 'kwo'),
+    (u'グヮ', 'gwa'), (u'グァ', 'gwa'), (u'グィ', 'gwi'), (u'グェ', 'gwe'), (u'グォ', 'gwo'),
+    (u'ヴ', 'vu'),
+    ] + [(''.join(unichr(ord(c)+0x60) for c in k), v) for k,v in tbl_hiragana]
+
+tbl_symbols = [
+    (u'〜', '~'), (u'。', '.'), (u'、', ','), (u'　', ' '),
+    ]
+
+tbl_all = tbl_hiragana + tbl_katakana + tbl_symbols
+kana2romaji_regex = re.compile('|'.join(s for s, _ in tbl_all))
+kana2romaji_map = dict(tbl_all)
+
+
+def kana2romaji(txt):
+  txt = unicode(txt)
+  txt = kana2romaji_regex.sub(lambda m: kana2romaji_map[m.group()], txt)
+  txt = re.sub(ur'[っッ]([bcdfghjkmnprstvwz])', r'\1\1', txt)
+  txt = re.sub(ur'([aeiou])ー', r'\1\1', txt)
+  txt = re.sub(ur'[・ー−―]', '-', txt)
+  txt = re.sub(ur'[っッ]', r'-tsu', txt)
+  txt = re.sub(ur'[\uff00-\uff5e]', lambda m: unichr(ord(m.group(0)) - 0xfee0), txt)
+  try:
+    txt = str(txt)
+  except UnicodeEncodeError, e:
+    print 'Warning: characters not translated in "%s"' % repr(txt)
+    txt = txt.encode('ascii', 'replace')
+  return txt
+
+
+def import_jmdict(fin, output):
+  """Import JMdict file into an database
+
+  fin can be a file object or a filename.
+  output can be aither an sqlite3 connection or a filename.
+  """
+  parser = xml.sax.make_parser()
+  parser.setContentHandler(JMDictHandler(output))
+  print "importing JMdict XML file to database..."
+  parser.parse(fin)
+
+
+# Last JMdict version (English only)
+jmdict_url = 'http://ftp.monash.edu.au/pub/nihongo/JMdict_e.gz'
+
+
+
 def main():
   import argparse
   parser = argparse.ArgumentParser(description="GTK+ interface for JMdict.")
   parser.add_argument('-d', '--database', metavar='FILE',
       help="SQLite database to use")
+  group = parser.add_mutually_exclusive_group()
+  group.add_argument('--import', dest='import_url', action='store_true',
+      help="import JMdict from public URL")
+  group.add_argument('--import-file', metavar='FILE',
+      help="import JMdict from a file")
   parser.add_argument('search', nargs='?',
       help="search text")
   args = parser.parse_args()
 
+  import_db = args.import_url or args.import_file
+
   if args.database is None:
-    app_path = os.path.dirname(os.path.realpath(__file__))
     default_name = 'jpy.sqlite3'
-    for f in (default_name, os.path.join(app_path, default_name)):
-      if os.path.isfile(f):
-        args.database = f
-        break
-    if args.database is None:
-      parser.error("cannot find a database file, please use '-d' option")
+    app_path = os.path.dirname(os.path.realpath(__file__))
+    if import_db:
+      args.database = os.path.join(app_path, default_name)
+    else:
+      # DB must exist
+      for f in (default_name, os.path.join(app_path, default_name)):
+        if os.path.isfile(f):
+          args.database = f
+          break
+      if args.database is None:
+        parser.error("cannot find a database file, please use '-d' option")
+
+  if args.import_url:
+    import urllib
+    from StringIO import StringIO
+    print "downloading JMdict..."
+    f = StringIO(urllib.urlopen(jmdict_url).read())
+    f = gzip.GzipFile(fileobj=f)
+    import_jmdict(f, args.database)
+  elif args.import_file:
+    f = args.import_file
+    if f.endswith('.gz'):
+      f = gzip.GzipFile(f)
+    import_jmdict(f, args.database)
+
+  if import_db and not args.search:
+    return
 
   app = JpyApp(args.database)
   if args.search:
