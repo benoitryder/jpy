@@ -83,7 +83,7 @@ class JpyApp:
     if len(txt) == 0:
       return
 
-    result = Query(txt, limit=50).execute()
+    result = Query(txt.decode('utf-8'), limit=50).execute()
 
     self.w_search.get_child().select_region(0, -1)
     self.w_search.prepend_text(txt)
@@ -159,7 +159,6 @@ class Query:
     if not s:
       return ''
 
-    s = unicode(s)
     if s[0] == '/':
       self.to_jp = True
       s = s[1:]
