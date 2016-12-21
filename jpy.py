@@ -7,6 +7,8 @@ import sqlite3
 import xml.sax
 import gzip
 
+__version__ = '1.0'
+
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, Pango
@@ -21,14 +23,22 @@ class JpyApp:
     self.window.set_title('jpy')
     self.window.connect('delete_event', lambda w,e: Gtk.main_quit())
 
-    box = Gtk.Box.new(Gtk.Orientation.VERTICAL, 0)
-    self.window.add(box)
+    vbox = Gtk.Box.new(Gtk.Orientation.VERTICAL, 0)
+    self.window.add(vbox)
+
+    hbox = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, 0)
 
     self.w_search = Gtk.ComboBoxText.new_with_entry()
     self.w_search.get_child().connect('activate', lambda w: self.display_results(w.get_text()))
     self.w_search.get_child().modify_text(Gtk.StateType.NORMAL, Gdk.color_parse('black'))
     self.w_search.get_child().modify_font(Pango.FontDescription('sans 12'))
-    box.pack_start(self.w_search, False, False, 0)
+    hbox.pack_start(self.w_search, True, True, 0)
+
+    self.w_help = Gtk.Button.new_from_icon_name("help-faq", Gtk.IconSize.BUTTON)
+    self.w_help.connect('clicked', self.show_help)
+    hbox.pack_start(self.w_help, False, False, 0)
+
+    vbox.pack_start(hbox, False, False, 0)
 
     # Tags (customize style of displayed text here)
     tagtable = Gtk.TextTagTable()
@@ -59,13 +69,9 @@ class JpyApp:
     self.w_display = Gtk.ScrolledWindow()
     self.w_display.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
     self.w_display.add_with_viewport(self.w_result)
-    box.pack_start(self.w_display, True, True, 0)
+    vbox.pack_start(self.w_display, True, True, 0)
 
-    box.show()
-    self.w_search.show()
-    self.w_result.show()
-    self.w_display.show()
-    self.window.show()
+    self.window.show_all()
 
     # Connect to SQLite database
     if not os.path.isfile(db):
@@ -106,6 +112,68 @@ class JpyApp:
 
     # Scroll at the top
     self.w_display.get_vadjustment().set_value(0)
+
+  def show_help(self, w):
+    dialog = Gtk.Dialog("Help", self.window)
+    dialog.set_resizable(False)
+
+    box = dialog.get_content_area()
+
+    tbox = Gtk.Box.new(Gtk.Orientation.VERTICAL, 5)
+    tbox.set_margin_start(10)
+    tbox.set_margin_end(10)
+    tbox.set_margin_top(10)
+    tbox.set_margin_bottom(20)
+
+    custom_markups = [
+        ('{em}', '<span bgcolor="black" bgalpha="10%">'),
+        ('{/em}', '</span>'),
+        ]
+
+    texts = [  # (markup, properties)
+        ("<big><b>jpy v%s</b></big>" % __version__, {'halign': 0.5}),
+        ("<b>How to search</b>", {'margin_top': 10, 'margin_left': 20}),
+        ("To translate Japanese into English, enter Japanese (kanjis, kanas, romanization).", None),
+        ("To translate English into Japanese, start with a {em}/{/em} followed by the English text.\n"
+         "For instance, searching for {em}/dictionary{/em} will return {em}字引{/em}.", None),
+        ("Wildcards characters can be used for more refined searches.\n"
+         "Without wildcards, search will match anything starting with the given pattern.\n"
+         "  {em}*{/em} or {em}%{/em} replace any text: {em}pi*e{/em} searches for {em}pie{/em}, {em}pipe{/em}, {em}piece{/em}, ...\n"
+         "  {em}?{/em} or {em}_{/em} replace a single character: {em}?回{/em} searches for {em}何回{/em}, {em}今回{/em} but not {em}一次回{/em}."
+         , {'margin_top': 5}),
+        ("Romanization uses the usual kana to latin conversion.\n"
+         "Long voyels are transcribed similarly to hiraganas:\n"
+         "{em}先生{/em} becomes {em}sensei{/em},"
+         " {em}大{/em} becomes {em}oo{/em},"
+         " {em}ローマ{/em} becomes {em}roomaji{/em}."
+         , None),
+        ("<b>Dictionary</b>", {'margin_top': 10, 'margin_left': 20}),
+        ("This application uses Japanese dictionary from the JMdict project.\n"
+         "<a href='http://www.edrdg.org/jmdict/j_jmdict.html'>More information and license terms.</a>"
+         , None),
+        ]
+
+    for markup, props in texts:
+      label = Gtk.Label()
+
+      for pat,sub in custom_markups:
+        markup = markup.replace(pat, sub)
+      label.set_markup(markup)
+      label.set_halign(Gtk.Align.START)
+      if props:
+        for k,v in props.items():
+          getattr(label, 'set_%s' % k)(v)
+      tbox.add(label)
+
+    # create button but reparent it to align it
+    box.add(tbox)
+    close = dialog.add_button("_Close", Gtk.ResponseType.CLOSE)
+    close.get_parent().remove(close)
+    box.add(close)
+
+    dialog.show_all()
+    dialog.run()
+    dialog.destroy()
 
 
 class Query:
