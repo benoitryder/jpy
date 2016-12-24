@@ -4,6 +4,7 @@
 import os
 import re
 import sqlite3
+import time
 import xml.sax
 import gzip
 
@@ -76,7 +77,7 @@ class JpyApp:
     # Connect to SQLite database
     if not os.path.isfile(db):
       raise ValueError("database file not found: %s"%db)
-    Query.connect(db)
+    self.conn = sqlite3.connect(db)
 
 
   def main(self):
@@ -89,7 +90,7 @@ class JpyApp:
     if len(txt) == 0:
       return
 
-    result = Query(txt.decode('utf-8'), limit=50).execute()
+    result = Query(self.conn, txt.decode('utf-8'), limit=50).execute()
 
     self.w_search.get_child().select_region(0, -1)
     self.w_search.prepend_text(txt)
@@ -124,62 +125,73 @@ class JpyApp:
     tbox.set_margin_end(10)
     tbox.set_margin_top(10)
     tbox.set_margin_bottom(20)
+    box.add(tbox)
 
     custom_markups = [
         ('{em}', '<span bgcolor="black" bgalpha="10%">'),
         ('{/em}', '</span>'),
         ]
 
-    texts = [  # (markup, properties)
-        ("<big><b>jpy v%s</b></big>" % __version__, {'halign': 0.5}),
-        ("<b>How to search</b>", {'margin_top': 10, 'margin_left': 20}),
-        ("To translate Japanese into English, enter Japanese (kanjis, kanas, romanization).", None),
-        ("To translate English into Japanese, start with a {em}/{/em} followed by the English text.\n"
-         "For instance, searching for {em}/dictionary{/em} will return {em}字引{/em}.", None),
-        ("Wildcards characters can be used for more refined searches.\n"
-         "Without wildcards, search will match anything starting with the given pattern.\n"
-         "  {em}*{/em} or {em}%{/em} replace any text: {em}pi*e{/em} searches for {em}pie{/em}, {em}pipe{/em}, {em}piece{/em}, ...\n"
-         "  {em}?{/em} or {em}_{/em} replace a single character: {em}?回{/em} searches for {em}何回{/em}, {em}今回{/em} but not {em}一次回{/em}."
-         , {'margin_top': 5}),
-        ("Romanization uses the usual kana to latin conversion.\n"
-         "Long voyels are transcribed similarly to hiraganas:\n"
-         "{em}先生{/em} becomes {em}sensei{/em},"
-         " {em}大{/em} becomes {em}oo{/em},"
-         " {em}ローマ{/em} becomes {em}roomaji{/em}."
-         , None),
-        ("<b>Dictionary</b>", {'margin_top': 10, 'margin_left': 20}),
-        ("This application uses Japanese dictionary from the JMdict project.\n"
-         "<a href='http://www.edrdg.org/jmdict/j_jmdict.html'>More information and license terms.</a>"
-         , None),
-        ]
-
-    for markup, props in texts:
-      label = Gtk.Label()
-
+    def text_label(markup, **props):
       for pat,sub in custom_markups:
         markup = markup.replace(pat, sub)
+      label = Gtk.Label()
       label.set_markup(markup)
       label.set_halign(Gtk.Align.START)
       if props:
         for k,v in props.items():
           getattr(label, 'set_%s' % k)(v)
-      tbox.add(label)
+      return label
 
-    # create button but reparent it to align it
-    box.add(tbox)
-    close = dialog.add_button("_Close", Gtk.ResponseType.CLOSE)
-    close.get_parent().remove(close)
-    box.add(close)
+    tbox.add(text_label("<big><b>jpy v%s</b></big>" % __version__, halign=0.5))
+    tbox.add(text_label("<b>How to search</b>", margin_top=10, margin_left=20))
+    tbox.add(text_label(
+      "To translate Japanese into English, enter Japanese (kanjis, kanas, romanization)."))
+    tbox.add(text_label(
+      "To translate English into Japanese, start with a {em}/{/em} followed by the English text.\n"
+      "For instance, searching for {em}/dictionary{/em} will return {em}字引{/em}."))
+    tbox.add(text_label(
+      "Wildcards characters can be used for more refined searches.\n"
+      "Without wildcards, search will match anything starting with the given pattern.\n"
+      "  {em}*{/em} or {em}%{/em} replace any text: {em}pi*e{/em} searches for {em}pie{/em}, {em}pipe{/em}, {em}piece{/em}, ...\n"
+      "  {em}?{/em} or {em}_{/em} replace a single character: {em}?回{/em} searches for {em}何回{/em}, {em}今回{/em} but not {em}一次回{/em}.", margin_top=5))
+    tbox.add(text_label(
+      "Romanization uses the usual kana to latin conversion.\n"
+      "Long voyels are transcribed similarly to hiraganas:\n"
+      "{em}先生{/em} becomes {em}sensei{/em},"
+      " {em}大{/em} becomes {em}oo{/em},"
+      " {em}ローマ{/em} becomes {em}roomaji{/em}."))
+
+    tbox.add(text_label("<b>Dictionary</b>", margin_top=10, margin_left=20))
+    dbox = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, 0)
+    tbox.add(dbox)
+    dbox.add(text_label(
+      "This application uses Japanese dictionary from the JMdict project.\n"
+      "<a href='http://www.edrdg.org/jmdict/j_jmdict.html'>More information and license terms.</a>"))
+    w_update = Gtk.Button.new_with_label("Update\ndictionary")
+    w_update.set_margin_left(20)
+    w_update.get_child().set_justify(Gtk.Justification.CENTER)
+    w_update.connect('clicked', self.update_dictionary)
+    dbox.add(w_update)
+
+    # create close button but reparent it to align it
+    w_close = dialog.add_button("_Close", Gtk.ResponseType.CLOSE)
+    w_close.get_parent().remove(w_close)
+    box.add(w_close)
 
     dialog.show_all()
     dialog.run()
     dialog.destroy()
+
+  def update_dictionary(self, w):
+    pass
 
 
 class Query:
   """Search query and database connection.
 
   Instance attributes:
+    conn -- SQLite Connection object
     to_jp -- search for Japanese translation (default: False)
     pattern -- search pattern, with (converted) wildcards
     limit -- maximum number of results (no limit: negative number, the default)
@@ -188,24 +200,19 @@ class Query:
     build -- build a query from an ordinary search string
     execute -- execute the query and return the result Entry list
 
-  Class method:
-    connect -- initialize the SQLite DB connection
-
-  Class attribute:
-    conn -- SQLite Connection object
-
   Instance attribute:
 
   """
 
   conn = None
 
-  def __init__(self, s=None, to_jp=False, limit=None):
+  def __init__(self, conn, s=None, to_jp=False, limit=None):
     """Build a query.
     Arguments values may be overwritten by special tags in search string.
 
     """
 
+    self.conn = conn
     self.to_jp = to_jp
     self.limit = limit
     self.pattern = None
@@ -284,10 +291,6 @@ class Query:
 
     return [result[e] for e in ent_id]
 
-  @classmethod
-  def connect(cls, dbfile):
-    cls.conn = sqlite3.connect(dbfile)
-
 
 class Entry:
   """Dictionary entry.
@@ -333,7 +336,7 @@ class JMDictHandler(xml.sax.handler.ContentHandler):
 
   def endDocument(self):
     with self.db_output as conn:
-      for s in ('kanji', 'reading', 'sense', 'gloss'):
+      for s in ('kanji', 'reading', 'sense', 'gloss', 'version'):
         conn.execute("DROP TABLE IF EXISTS %s" % s)
 
       conn.execute("""
@@ -366,6 +369,11 @@ class JMDictHandler(xml.sax.handler.ContentHandler):
         gloss TEXT NOT NULL
       )
       """)
+      conn.execute("""
+      CREATE TABLE version (
+        updated_at INT NOT NULL
+      )
+      """)
 
       conn.executemany("INSERT INTO kanji VALUES (?,?)", self.kanji_values)
       conn.executemany("INSERT INTO reading VALUES (?,?,?)", self.reading_values)
@@ -376,6 +384,7 @@ class JMDictHandler(xml.sax.handler.ContentHandler):
       conn.execute("CREATE INDEX r_ent ON reading (ent_id)")
       conn.execute("CREATE INDEX g_sense ON gloss (ent_id, sense_num)")
 
+      conn.execute("INSERT INTO version VALUES (?)", (int(time.time()),))
       #conn.execute('VACUUM')
       conn.commit()
 
@@ -488,19 +497,26 @@ def kana2romaji(txt):
 
 
 def import_jmdict(fin, output):
-  """Import JMdict file into an database
+  """Import JMdict file into a database
 
   fin can be a file object or a filename.
   output can be aither an sqlite3 connection or a filename.
   """
   parser = xml.sax.make_parser()
   parser.setContentHandler(JMDictHandler(output))
-  print "importing JMdict XML file to database..."
   parser.parse(fin)
-
 
 # Last JMdict version (English only)
 jmdict_url = 'http://ftp.monash.edu.au/pub/nihongo/JMdict_e.gz'
+
+def fetch_jmdict_url():
+  """Fetch JMdict from URL into a StringIO"""
+
+  import urllib
+  from StringIO import StringIO
+  f = StringIO(urllib.urlopen(jmdict_url).read())
+  f = gzip.GzipFile(fileobj=f)
+  return f
 
 
 
@@ -535,16 +551,15 @@ def main():
         parser.error("cannot find a database file, please use '-d' option")
 
   if args.import_url:
-    import urllib
-    from StringIO import StringIO
     print "downloading JMdict..."
-    f = StringIO(urllib.urlopen(jmdict_url).read())
-    f = gzip.GzipFile(fileobj=f)
+    f = fetch_jmdict_url()
+    print "importing JMdict to database..."
     import_jmdict(f, args.database)
   elif args.import_file:
     f = args.import_file
     if f.endswith('.gz'):
       f = gzip.GzipFile(f)
+    print "importing JMdict XML file to database..."
     import_jmdict(f, args.database)
 
   if import_db and not args.search:
