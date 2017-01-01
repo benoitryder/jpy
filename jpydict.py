@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 # vim: fileencoding=utf-8
 
 import os
@@ -11,7 +11,7 @@ import urllib2
 import gzip
 import zlib
 
-__version__ = '1.0'
+__version__ = '1.0.0'
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -642,18 +642,11 @@ def main():
   import_db = args.import_url or args.import_file
 
   if args.database is None:
-    default_name = 'jpydict.sqlite3'
-    app_path = os.path.dirname(os.path.realpath(__file__))
-    if import_db:
-      args.database = os.path.join(app_path, default_name)
-    else:
-      # DB must exist
-      for f in (default_name, os.path.join(app_path, default_name)):
-        if os.path.isfile(f):
-          args.database = f
-          break
-      if args.database is None:
-        parser.error("cannot find a database file, please use '-d' option")
+    import appdirs
+    data_dir = appdirs.user_data_dir('jpydict', '')
+    if not os.path.isdir(data_dir):
+      os.makedirs(data_dir)
+    args.database = os.path.join(data_dir, 'jpydict.sqlite3')
 
   if import_db:
     def reporter(msg, progress):
