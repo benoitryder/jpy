@@ -18,13 +18,13 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, Pango
 
 
-class JpyApp:
+class JpydictApp:
 
   def __init__(self, db=None):
     self.window = Gtk.Window(Gtk.WindowType.TOPLEVEL)
     self.window.set_resizable(True)
     self.window.set_size_request(400, 500)
-    self.window.set_title('jpy')
+    self.window.set_title('jpydict')
     self.window.connect('delete_event', lambda w,e: Gtk.main_quit())
 
     vbox = Gtk.Box.new(Gtk.Orientation.VERTICAL, 0)
@@ -148,7 +148,7 @@ class JpyApp:
           getattr(label, 'set_%s' % k)(v)
       return label
 
-    tbox.add(text_label("<big><b>jpy v%s</b></big>" % __version__, halign=0.5))
+    tbox.add(text_label("<big><b>jpydict v%s</b></big>" % __version__, halign=0.5))
     tbox.add(text_label("<b>How to search</b>", margin_top=10, margin_left=20))
     tbox.add(text_label(
       "To translate Japanese into English, enter Japanese (kanjis, kanas, romanization)."))
@@ -642,7 +642,7 @@ def main():
   import_db = args.import_url or args.import_file
 
   if args.database is None:
-    default_name = 'jpy.sqlite3'
+    default_name = 'jpydict.sqlite3'
     app_path = os.path.dirname(os.path.realpath(__file__))
     if import_db:
       args.database = os.path.join(app_path, default_name)
@@ -674,7 +674,7 @@ def main():
   if import_db and not args.search:
     return
 
-  app = JpyApp(args.database)
+  app = JpydictApp(args.database)
   if args.search:
     app.w_search.get_child().set_text(args.search)
     app.w_search.get_child().activate()
