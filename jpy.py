@@ -174,7 +174,7 @@ class JpyApp:
     w_update = Gtk.Button.new_with_label("Update\ndictionary")
     w_update.set_margin_left(20)
     w_update.get_child().set_justify(Gtk.Justification.CENTER)
-    w_update.connect('clicked', self.update_dictionary)
+    w_update.connect('clicked', lambda w: self.update_dictionary(dialog))
     dbox.add(w_update)
 
     # create close button but reparent it to align it
@@ -186,8 +186,53 @@ class JpyApp:
     dialog.run()
     dialog.destroy()
 
-  def update_dictionary(self, w):
-    pass
+  def update_dictionary(self, parent):
+    dialog = Gtk.Dialog("Dictionary update", parent)
+    dialog.set_modal(True)
+    dialog.set_resizable(False)
+    dialog.set_size_request(350, -1)
+
+    box = dialog.get_content_area()
+    box.set_margin_start(10)
+    box.set_margin_end(10)
+    box.set_margin_top(10)
+    box.set_margin_bottom(20)
+
+    label = Gtk.Label()
+    label.set_margin_bottom(10)
+    bar = Gtk.ProgressBar()
+    box.add(label)
+    box.add(bar)
+    dialog.show_all()
+
+    class AbortException(Exception):
+      pass
+
+    def reporter(msg, progress):
+      if msg is None:
+        label.set_text("Dictionary update")
+        bar.set_fraction(1)
+      else:
+        label.set_text(msg)
+        if progress is None:
+          bar.pulse()
+        else:
+          bar.set_fraction(progress)
+      if not dialog.get_visible():
+        raise AbortException()  # dialog has been closed, abort
+      while Gtk.events_pending():
+        Gtk.main_iteration()
+
+    dialog.present()
+    while Gtk.events_pending():
+      Gtk.main_iteration()
+    loader = JMDictLoader(self.conn, reporter)
+    try:
+      loader.load_url()
+    except AbortException:
+      pass  # ignore
+
+    dialog.destroy()
 
 
 class Query:
