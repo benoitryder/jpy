@@ -27,7 +27,7 @@ It is available on most Linux distribution in package python-gi or
 python-gobject.
 
 On Windows, dependencies can be downloaded from
-`this page <https://sourceforge.net/projects/pygobjectwin32/files/?source=navbar>`.
+`this page <https://sourceforge.net/projects/pygobjectwin32/files/?source=navbar>`_.
 The easiest way is to install *pygi-aio*; make sure to install the following
 components: gtk3, pango.
 
