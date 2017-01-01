@@ -329,7 +329,7 @@ class JMDictLoader:
   jmdict_url = 'http://ftp.monash.edu.au/pub/nihongo/JMdict_e.gz'
 
   def __init__(self, db_output, reporter):
-    if not isinstance(sqlite3, sqlite3.Connection):
+    if not isinstance(db_output, sqlite3.Connection):
       db_output = sqlite3.connect(db_output)
     self.db_output = db_output
     self.reporter = reporter
