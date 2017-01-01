@@ -78,9 +78,11 @@ class JpyApp:
     self.window.show_all()
 
     # Connect to SQLite database
-    if not os.path.isfile(db):
-      raise ValueError("database file not found: %s"%db)
+    # Prompt for dictionary update if database is empty or does not exist
     self.conn = sqlite3.connect(db)
+    row = self.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='version'").fetchone()
+    if row is None:
+      self.update_dictionary(self.window)
 
 
   def main(self):
