@@ -166,16 +166,33 @@ class JpyApp:
       " {em}ローマ{/em} becomes {em}roomaji{/em}."))
 
     tbox.add(text_label("<b>Dictionary</b>", margin_top=10, margin_left=20))
-    dbox = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, 0)
-    tbox.add(dbox)
-    dbox.add(text_label(
+    dict_box = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, 0)
+    dict_txt_box = Gtk.Box.new(Gtk.Orientation.VERTICAL, 0)
+    tbox.add(dict_box)
+    dict_box.add(dict_txt_box)
+    dict_txt_box.add(text_label(
       "This application uses Japanese dictionary from the JMdict project.\n"
       "<a href='http://www.edrdg.org/jmdict/j_jmdict.html'>More information and license terms.</a>"))
     w_update = Gtk.Button.new_with_label("Update\ndictionary")
     w_update.set_margin_left(20)
     w_update.get_child().set_justify(Gtk.Justification.CENTER)
-    w_update.connect('clicked', lambda w: self.update_dictionary(dialog))
-    dbox.add(w_update)
+    dict_box.add(w_update)
+
+    updated_at_label = text_label('')
+    def update_updated_at():
+      row = self.conn.execute("SELECT updated_at FROM version").fetchone()
+      d = (time.time() - row[0]) / 86400
+      if d < 1:
+        txt = "today"
+      elif d < 2:
+        txt = "yesterday"
+      else:
+        txt = "%d days ago" % d
+      updated_at_label.set_text("Last update: %s." % txt)
+    update_updated_at()
+    dict_txt_box.add(updated_at_label)
+
+    w_update.connect('clicked', lambda w: self.update_dictionary(dialog, update_updated_at))
 
     # create close button but reparent it to align it
     w_close = dialog.add_button("_Close", Gtk.ResponseType.CLOSE)
@@ -186,7 +203,7 @@ class JpyApp:
     dialog.run()
     dialog.destroy()
 
-  def update_dictionary(self, parent):
+  def update_dictionary(self, parent, on_update=None):
     dialog = Gtk.Dialog("Dictionary update", parent)
     dialog.set_modal(True)
     dialog.set_resizable(False)
@@ -233,6 +250,8 @@ class JpyApp:
       pass  # ignore
 
     dialog.destroy()
+    if on_update:
+      on_update()
 
 
 class Query:
