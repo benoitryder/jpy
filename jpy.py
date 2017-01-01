@@ -2,11 +2,14 @@
 # vim: fileencoding=utf-8
 
 import os
+import sys
 import re
 import sqlite3
 import time
-import xml.sax
+import xml.parsers.expat
+import urllib2
 import gzip
+import zlib
 
 __version__ = '1.0'
 
@@ -310,21 +313,79 @@ class Entry:
     self.sense = []
 
 
-class JMDictHandler(xml.sax.handler.ContentHandler):
+class JMDictLoader:
+  """Load JMdict to database.
 
-  def __init__(self, db_output):
+  output can be either an sqlite3 connection or a filename.
+
+  reporter is a method used to report loading progress:
+    reporter(step, progress)
+  Where step is a string describing current step and progress the progress of
+  the current step, from 0 to 1, None if unknown.
+  reporter(None, None) is called at the end.
+  """
+
+  # Last JMdict version (English only)
+  jmdict_url = 'http://ftp.monash.edu.au/pub/nihongo/JMdict_e.gz'
+
+  def __init__(self, db_output, reporter):
     if not isinstance(sqlite3, sqlite3.Connection):
       db_output = sqlite3.connect(db_output)
     self.db_output = db_output
+    self.reporter = reporter
+    self.parser = xml.parsers.expat.ParserCreate()
+    self.parser.StartElementHandler = self.startElement
+    self.parser.EndElementHandler = self.endElement
+    self.parser.CharacterDataHandler = self.characterData
+    self.parser.EntityDeclHandler = self.entityDecl
+
+  def load_url(self):
+    """Load JMdict from public URL
+
+    Download and process by chunks to have progress and parallelize a bit.
+    """
+
+    result = urllib2.urlopen(self.jmdict_url)
+    try:
+      total_size = float(result.info().getheader('Content-Length').strip())
+    except AttributeError:
+      total_size = None
+
+    dec = zlib.decompressobj(32 + zlib.MAX_WBITS)  # offset 32 to skip the header
+    read_size = 0
+    self.startDocument()
+    while True:
+      self.reporter("Download and process XML dictionary file",
+                    None if total_size is None else read_size / total_size)
+      chunk = result.read(10240)
+      if not chunk:
+        break
+      read_size += len(chunk)
+      self.parser.Parse(dec.decompress(chunk))
+    self.parser.Parse('', True)
+    self.endDocument()
+    self.reporter(None, None)
+
+  def load_file(self, path):
+    """Load JMdict from a file"""
+
+    if path.endswith('.gz'):
+      f = gzip.GzipFile(path)
+    else:
+      f = open(path, 'rb')
+    self.reporter("Process XML dictionary file", None)
+    self.startDocument()
+    self.parser.ParseFile(f)
+    self.endDocument()
+    self.reporter(None, None)
+
 
   # Collect entity declarations, to back-resolve entities
-  def EntityDeclHandler(self, entityName, is_parameter_entity, value, base, systemId, publicId, notationName):
+  def entityDecl(self, entityName, is_parameter_entity, value, base, systemId, publicId, notationName):
     self.entities[value] = entityName
 
   def startDocument(self):
-    self._locator._ref._parser.EntityDeclHandler = self.EntityDeclHandler
     self.entities = {}
-
     self.cur_entry = None
     self.cur_sense = None
     self.txt = None
@@ -335,6 +396,8 @@ class JMDictHandler(xml.sax.handler.ContentHandler):
 
 
   def endDocument(self):
+    self.reporter("Updating database", None)
+
     with self.db_output as conn:
       for s in ('kanji', 'reading', 'sense', 'gloss', 'version'):
         conn.execute("DROP TABLE IF EXISTS %s" % s)
@@ -417,7 +480,7 @@ class JMDictHandler(xml.sax.handler.ContentHandler):
     elif name == 'gloss':
       self.gloss_values.append((self.cur_entry, self.sense, self.lang, self.txt))
 
-  def characters(self, content):
+  def characterData(self, content):
     self.txt += content
 
 
@@ -496,30 +559,6 @@ def kana2romaji(txt):
   return txt
 
 
-def import_jmdict(fin, output):
-  """Import JMdict file into a database
-
-  fin can be a file object or a filename.
-  output can be aither an sqlite3 connection or a filename.
-  """
-  parser = xml.sax.make_parser()
-  parser.setContentHandler(JMDictHandler(output))
-  parser.parse(fin)
-
-# Last JMdict version (English only)
-jmdict_url = 'http://ftp.monash.edu.au/pub/nihongo/JMdict_e.gz'
-
-def fetch_jmdict_url():
-  """Fetch JMdict from URL into a StringIO"""
-
-  import urllib
-  from StringIO import StringIO
-  f = StringIO(urllib.urlopen(jmdict_url).read())
-  f = gzip.GzipFile(fileobj=f)
-  return f
-
-
-
 def main():
   import argparse
   parser = argparse.ArgumentParser(description="GTK+ interface for JMdict.")
@@ -550,17 +589,21 @@ def main():
       if args.database is None:
         parser.error("cannot find a database file, please use '-d' option")
 
-  if args.import_url:
-    print "downloading JMdict..."
-    f = fetch_jmdict_url()
-    print "importing JMdict to database..."
-    import_jmdict(f, args.database)
-  elif args.import_file:
-    f = args.import_file
-    if f.endswith('.gz'):
-      f = gzip.GzipFile(f)
-    print "importing JMdict XML file to database..."
-    import_jmdict(f, args.database)
+  if import_db:
+    def reporter(msg, progress):
+      if msg is None:
+        sys.stdout.write("\n")
+      else:
+        if progress is not None:
+          msg = "%s  (%3d%%)" % (msg, int(progress * 100))
+        # assume all messages fit on 72 chars
+        sys.stdout.write("\r%s%s" % (msg, ' ' * (72 - len(msg))))
+
+    loader = JMDictLoader(args.database, reporter)
+    if args.import_url:
+      loader.load_url()
+    elif args.import_file:
+      loader.load_file(args.import_file)
 
   if import_db and not args.search:
     return
